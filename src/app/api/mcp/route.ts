@@ -50,14 +50,12 @@ async function initializeMCPServer(mcpServerUrl: string, headers: Record<string,
 
       // Extract session ID from headers
       sessionId = initResponse.headers.get('mcp-session-id');
-      console.log('MCP Session ID:', sessionId);
 
       // Handle SSE response
       const responseText = await initResponse.text();
       
       // Parse SSE format: "event: message\ndata: {...}"
       const lines = responseText.split('\n');
-      console.log('MCP Initialization Response:', lines);
       let jsonData = '';
       
       for (const line of lines) {
@@ -66,7 +64,6 @@ async function initializeMCPServer(mcpServerUrl: string, headers: Record<string,
           break;
         }
       }
-      console.log('Parsed JSON Data:', jsonData);
 
       if (jsonData) {
         const data = JSON.parse(jsonData);
@@ -76,14 +73,12 @@ async function initializeMCPServer(mcpServerUrl: string, headers: Record<string,
       } else {
         throw new Error('Invalid SSE response format');
       }
-      console.log(headers);
 
       // Step 2: Send initialized notification with session ID
       const notifyHeaders = {
         ...headers,
         ...(sessionId && { 'mcp-session-id': sessionId })
       };
-      console.log('Notify Headers:', notifyHeaders);
 
       const notifyResponse = await fetch(mcpServerUrl, {
         method: 'POST',
