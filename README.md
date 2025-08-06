@@ -64,13 +64,20 @@ npm run dev
     }
   }
   ```
-- client sends initialized notification:
+- Client sends initialized notification:
   ```json
   {
     "jsonrpc": "2.0",
     "method": "notifications/initialized"
   }
   ```
+
+### Session ID Management
+- Each MCP connection establishes a unique session ID
+- Session ID is used to:
+  - Track request/response pairs in JSON-RPC communication
+  - Maintain state between client and server
+- Session remains active until client disconnects or server terminates
 
 ### 2. Tool Discovery
 - Requests available tools:
