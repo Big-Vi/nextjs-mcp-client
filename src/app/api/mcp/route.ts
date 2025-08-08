@@ -109,7 +109,7 @@ async function initializeMCPServer(mcpServerUrl: string, headers: Record<string,
   await initPromise;
 }
 
-async function makeMCPRequest(method: string, params: any = {}) {
+async function makeMCPRequest(method: string, params: Record<string, unknown> = {}) {
   const mcpServerUrl = process.env.GITLAB_MCP_URL || 'http://127.0.0.1:3333/mcp';
   const baseHeaders = {
     'Content-Type': 'application/json',
@@ -230,6 +230,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ result });
         
       case 'reinitialize':
+        console.log('Reinitializing MCP connection...');
         resetConnection();
         // Try to reconnect immediately
         try {

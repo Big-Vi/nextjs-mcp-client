@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// For HTTP-based MCP servers (like your GitLab MCP in Docker)
+const DEVOPS_MCP_URL = 'http://localhost:3001/api/mcp';
+
+// For HTTP-based MCP servers (like your DevOps MCP server)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
-    
-    // Your GitLab MCP server URL (adjust based on your setup)
-    const mcpServerUrl = process.env.GITLAB_MCP_URL || 'http://127.0.0.1:3333/mcp';
 
     switch (action) {
       case 'list-tools':
-        const toolsResponse = await fetch(`${mcpServerUrl}`, {
+        const toolsResponse = await fetch(`${DEVOPS_MCP_URL}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream',
           },
           body: JSON.stringify({
             jsonrpc: '2.0',
@@ -24,24 +22,25 @@ export async function GET(request: NextRequest) {
           })
         });
         
-        // Handle SSE response from GitLab MCP server
+        // Handle SSE response from DevOps MCP server
         const responseText = await toolsResponse.text();
         
         // Parse SSE format: "event: message\ndata: {...}"
         if (responseText.includes('data: ')) {
           const jsonData = responseText.split('data: ')[1].split('\n')[0];
           const toolsData = JSON.parse(jsonData);
-          return NextResponse.json(toolsData);
+          // Extract tools from JSON-RPC result and return in expected format
+          return NextResponse.json({ tools: toolsData.result?.tools || [] });
         } else {
           // Fallback for JSON response
           const toolsData = JSON.parse(responseText);
-          return NextResponse.json(toolsData);
+          return NextResponse.json({ tools: toolsData.result?.tools || [] });
         }
         
       case 'status':
         return NextResponse.json({ 
           connected: true,
-          server: 'gitlab-mcp-server',
+          server: 'devops-mcp-server',
           timestamp: new Date().toISOString()
         });
         
@@ -49,9 +48,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
-    console.error('GitLab MCP API Error:', error);
+    console.error('DevOps MCP API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to communicate with GitLab MCP server' },
+      { error: 'Failed to communicate with DevOps MCP server' },
       { status: 500 }
     );
   }
@@ -60,20 +59,32 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { method, params } = body;
+    console.log('Received request body:', body);
     
-    const mcpServerUrl = process.env.GITLAB_MCP_URL || 'http://localhost:9000/mcp';
+    let method, params;
     
-    // Forward the MCP JSON-RPC call to your GitLab MCP server
-    const response = await fetch(mcpServerUrl, {
+    // Handle action-based format from UI
+    if (body.action === 'call-tool') {
+      method = 'tools/call';
+      params = {
+        name: body.toolName,
+        arguments: body.arguments || {}
+      };
+    } else if (body.method) {
+      // Handle direct JSON-RPC format
+      method = body.method;
+      params = body.params || {};
+    } else {
+      return NextResponse.json({ error: 'Invalid request format' }, { status: 400 });
+    }
+    
+    console.log('Converted to JSON-RPC:', { method, params });
+    
+    // Forward the MCP JSON-RPC call to your DevOps MCP server
+    const response = await fetch(DEVOPS_MCP_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        // Add any required headers for your GitLab MCP server
-        ...(process.env.GITLAB_TOKEN && {
-          'Authorization': `Bearer ${process.env.GITLAB_TOKEN}`
-        })
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -83,7 +94,7 @@ export async function POST(request: NextRequest) {
       })
     });
     
-    // Handle SSE response from GitLab MCP server
+    // Handle SSE response from DevOps MCP server
     const responseText = await response.text();
     
     // Parse SSE format: "event: message\ndata: {...}"
@@ -97,9 +108,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data);
     }
   } catch (error) {
-    console.error('GitLab MCP API Error:', error);
+    console.error('DevOps MCP API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to call GitLab MCP server' },
+      { error: 'Failed to call DevOps MCP server' },
       { status: 500 }
     );
   }

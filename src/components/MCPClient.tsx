@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useMCP, MCPTool, ToolCallResult } from '../hooks/useMCP';
+import { useMCP, MCPTool, ToolCallResult, MCPServer } from '../hooks/useMCP';
+import MCPServerSelector from './MCPServerSelector';
+import AddServerModal from './AddServerModal';
 
 export default function MCPClient() {
   const { 
@@ -9,8 +11,12 @@ export default function MCPClient() {
     error, 
     tools, 
     connected, 
-    connectToGitLabMCP, 
-    listTools, 
+    currentServer,
+    availableServers,
+    connectToMCPServer,
+    switchServer,
+    addCustomServer,
+    removeCustomServer,
     callTool,
     resetConnection,
     reinitializeConnection,
@@ -19,11 +25,53 @@ export default function MCPClient() {
   const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null);
   const [toolArgs, setToolArgs] = useState<string>('{}');
   const [toolResult, setToolResult] = useState<ToolCallResult | null>(null);
+  const [showAddServerModal, setShowAddServerModal] = useState(false);
 
-  useEffect(() => {
-    // Auto-connect on component mount
-    connectToGitLabMCP().catch(console.error);
-  }, [connectToGitLabMCP]);
+  // Disable auto-connect - let users manually connect
+  // useEffect(() => {
+  //   // Auto-connect only on initial mount if there's a default server
+  //   if (currentServer && !connected && !loading && availableServers.length > 0) {
+  //     // Only auto-connect once on mount, not on every server change
+  //     const hasConnectedBefore = sessionStorage.getItem(`mcp-connected-${currentServer.id}`);
+  //     if (!hasConnectedBefore) {
+  //       sessionStorage.setItem(`mcp-connected-${currentServer.id}`, 'true');
+  //       connectToMCPServer().catch((err) => {
+  //         console.error('Auto-connect failed:', err);
+  //       });
+  //     }
+  //   }
+  // }, [currentServer, connected, loading, availableServers, connectToMCPServer]);
+
+  const handleServerChange = async (serverId: string) => {
+    try {
+      // Reset tool execution state when switching servers
+      setSelectedTool(null);
+      setToolArgs('{}');
+      setToolResult(null);
+      
+      await switchServer(serverId);
+    } catch (err) {
+      console.error('Server switch error:', err);
+    }
+  };
+
+  const handleAddServer = (server: MCPServer) => {
+    try {
+      addCustomServer(server);
+    } catch (err) {
+      console.error('Add server error:', err);
+      // You might want to show an error message to the user here
+    }
+  };
+
+  const handleRemoveServer = (serverId: string) => {
+    try {
+      removeCustomServer(serverId);
+    } catch (err) {
+      console.error('Remove server error:', err);
+      // You might want to show an error message to the user here
+    }
+  };
 
   const handleCallTool = async () => {
     if (!selectedTool) return;
@@ -46,9 +94,13 @@ export default function MCPClient() {
             {content.type === 'text' && (
               <pre className="whitespace-pre-wrap text-sm">{content.text}</pre>
             )}
-            {content.type === 'image' && content.data && (
-              <img src={content.data} alt="Tool result" className="max-w-full h-auto" />
-            )}
+            {content.type === 'image' && content.data != null ? (
+              <div className="max-w-full h-auto p-2 bg-gray-100 dark:bg-gray-700 rounded">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Image result available (data: {typeof content.data === 'string' ? content.data.substring(0, 50) : 'binary data'}...)
+                </p>
+              </div>
+            ) : null}
             {content.type !== 'text' && content.type !== 'image' && (
               <pre className="text-sm text-gray-600">
                 {JSON.stringify(content, null, 2)}
@@ -67,41 +119,53 @@ export default function MCPClient() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">GitLab MCP Client Dashboard</h1>
+      <h1 className="text-3xl font-bold mb-6">MCP Client Dashboard</h1>
+      
+      {/* Server Selection */}
+      <MCPServerSelector
+        currentServer={currentServer}
+        availableServers={availableServers}
+        onServerChange={handleServerChange}
+        onAddServer={() => setShowAddServerModal(true)}
+        onRemoveServer={handleRemoveServer}
+        disabled={loading}
+      />
+
+      {/* Add Server Modal */}
+      <AddServerModal
+        isOpen={showAddServerModal}
+        onClose={() => setShowAddServerModal(false)}
+        onAddServer={handleAddServer}
+      />
       
       {/* Connection Status */}
       <div className={`mb-4 p-4 rounded-lg ${connected 
         ? 'bg-green-100 border border-green-400 text-green-700' 
-        : 'bg-yellow-100 border border-yellow-400 text-yellow-700'
+        : currentServer
+          ? 'bg-gray-100 border border-gray-400 text-gray-700'
+          : 'bg-yellow-100 border border-yellow-400 text-yellow-700'
       }`}>
         <div className="flex items-center">
-          <div className={`w-3 h-3 rounded-full mr-2 ${connected ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+          <div className={`w-3 h-3 rounded-full mr-2 ${
+            connected ? 'bg-green-500' : currentServer ? 'bg-gray-400' : 'bg-yellow-500'
+          }`}></div>
           <span className="font-medium">
-            {connected ? 'Connected to GitLab MCP Server' : 'Connecting to GitLab MCP Server...'}
+            {connected 
+              ? `Connected to ${currentServer?.name || 'MCP Server'}` 
+              : currentServer 
+                ? `Ready to connect to ${currentServer.name}` 
+                : 'No server selected'
+            }
           </span>
         </div>
-        {!connected && (
-          <div className="mt-2 flex gap-2">
+        {!connected && currentServer && (
+          <div className="mt-2">
             <button
-              onClick={() => connectToGitLabMCP()}
+              onClick={() => connectToMCPServer()}
               disabled={loading}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Connecting...' : 'Retry Connection'}
-            </button>
-            <button
-              onClick={() => resetConnection()}
-              disabled={loading}
-              className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50"
-            >
-              Reset Connection
-            </button>
-            <button
-              onClick={() => reinitializeConnection()}
-              disabled={loading}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-            >
-              Reinitialize
+              {loading ? 'Connecting...' : 'Connect to Server'}
             </button>
           </div>
         )}
@@ -114,13 +178,6 @@ export default function MCPClient() {
             >
               Check Status
             </button>
-            <button
-              onClick={() => reinitializeConnection()}
-              disabled={loading}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
-            >
-              Force Reinitialize
-            </button>
           </div>
         )}
       </div>
@@ -131,10 +188,11 @@ export default function MCPClient() {
           <details className="mt-2">
             <summary className="cursor-pointer">Troubleshooting</summary>
             <ul className="mt-2 text-sm list-disc list-inside">
-              <li>Make sure your GitLab MCP server is running</li>
-              <li>Check the GITLAB_MCP_URL in your .env file</li>
-              <li>Verify your GitLab token is valid</li>
-              <li>Ensure the server is accessible from localhost</li>
+              <li>Make sure your MCP server is running</li>
+              <li>Check the server configuration and URL</li>
+              <li>Verify your authentication token is valid</li>
+              <li>Ensure the server is accessible</li>
+              <li>Try switching to a different server if available</li>
             </ul>
           </details>
         </div>
@@ -150,10 +208,17 @@ export default function MCPClient() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Tools List */}
         <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Available GitLab Tools</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            Available Tools
+            {currentServer && (
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                ({currentServer.name})
+              </span>
+            )}
+          </h2>
           {tools.length === 0 ? (
             <div className="text-gray-500">
-              {connected ? 'No tools available' : 'Connect to server to see tools'}
+              {connected ? 'No tools available' : currentServer ? 'Connect to server to see tools' : 'Select a server to see available tools'}
             </div>
           ) : (
             <div className="space-y-2">
@@ -205,7 +270,7 @@ export default function MCPClient() {
               
               <button
                 onClick={handleCallTool}
-                disabled={loading || !connected}
+                disabled={loading || !connected || !currentServer}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
                 {loading ? 'Executing...' : 'Execute Tool'}

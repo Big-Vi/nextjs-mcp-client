@@ -7,6 +7,9 @@ export class MCPClientManager {
   private transport: StdioClientTransport | null = null;
   private tools: Tool[] = [];
   private connected = false;
+  private httpServerUrl: string | null = null;
+  private httpHeaders: Record<string, string> = {};
+  private sessionId: string | null = null;
 
   constructor() {
     this.mcp = new Client({ 
@@ -63,31 +66,77 @@ export class MCPClientManager {
      * @param headers - Additional headers for authentication
      */
     try {
-      // Test connection by listing tools
-      const response = await fetch(serverUrl, {
+      this.httpServerUrl = serverUrl;
+      this.httpHeaders = { ...headers };
+      
+      // Get or create a session
+      if (!this.sessionId) {
+        const sessionResponse = await fetch(`${serverUrl}?action=new-session`);
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json();
+          this.sessionId = sessionData.sessionId;
+        }
+        
+        // If session creation failed, generate a client-side session ID
+        if (!this.sessionId) {
+          this.sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        }
+      }
+      
+      // Initialize the session
+      const initResponse = await fetch(serverUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'mcp-session-id': this.sessionId,
           ...headers,
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
-          method: 'tools/list'
+          method: 'initialize',
+          params: {}
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (!initResponse.ok) {
+        throw new Error(`HTTP ${initResponse.status}: ${initResponse.statusText}`);
       }
 
-      const data = await response.json();
+      // Parse SSE response or JSON response
+      const initData = await this.parseServerResponse(initResponse);
       
-      if (data.error) {
-        throw new Error(`MCP Error: ${data.error.message}`);
+      if (initData.error) {
+        throw new Error(`MCP Init Error: ${initData.error.message}`);
       }
 
-      this.tools = data.result?.tools || [];
+      // List available tools
+      const toolsResponse = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'mcp-session-id': this.sessionId,
+          ...headers,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/list',
+          params: {}
+        })
+      });
+
+      if (!toolsResponse.ok) {
+        throw new Error(`HTTP ${toolsResponse.status}: ${toolsResponse.statusText}`);
+      }
+
+      const toolsData = await this.parseServerResponse(toolsResponse);
+      
+      if (toolsData.error) {
+        throw new Error(`MCP Tools Error: ${toolsData.error.message}`);
+      }
+
+      this.tools = toolsData.result?.tools || [];
       this.connected = true;
       
       console.log(
@@ -100,6 +149,30 @@ export class MCPClientManager {
       console.error("Failed to connect to HTTP MCP server: ", e);
       this.connected = false;
       throw e;
+    }
+  }
+
+  private async parseServerResponse(response: Response): Promise<any> {
+    /**
+     * Parse server response, handling both JSON and SSE formats
+     */
+    const contentType = response.headers.get('content-type') || '';
+    
+    if (contentType.includes('text/event-stream')) {
+      // Handle SSE format
+      const text = await response.text();
+      const lines = text.trim().split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          return JSON.parse(line.substring(6));
+        }
+      }
+      
+      throw new Error('No data found in SSE response');
+    } else {
+      // Handle JSON format
+      return await response.json();
     }
   }
 
@@ -130,10 +203,39 @@ export class MCPClientManager {
         arguments: args,
       });
       return result;
+    } else if (this.httpServerUrl && this.sessionId) {
+      // For HTTP-based servers with session management
+      const response = await fetch(this.httpServerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'mcp-session-id': this.sessionId,
+          ...this.httpHeaders,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: args
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await this.parseServerResponse(response);
+      
+      if (data.error) {
+        throw new Error(`Tool Error: ${data.error.message}`);
+      }
+
+      return data.result;
     } else {
-      // For HTTP-based servers, this would need to be implemented
-      // based on your specific HTTP MCP server API
-      throw new Error("HTTP tool calling not implemented in this manager");
+      throw new Error("No valid connection method available for tool calling");
     }
   }
 
@@ -199,6 +301,10 @@ export class MCPClientManager {
     }
   }
 
+  getSessionId() {
+    return this.sessionId;
+  }
+
   async cleanup() {
     /**
      * Clean up resources
@@ -208,6 +314,9 @@ export class MCPClientManager {
     }
     this.connected = false;
     this.transport = null;
+    this.httpServerUrl = null;
+    this.httpHeaders = {};
+    this.sessionId = null;
     this.tools = [];
   }
 }
