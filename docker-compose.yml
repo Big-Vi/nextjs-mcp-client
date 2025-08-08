@@ -1,0 +1,66 @@
+services:
+  # DevOps MCP Server (your custom server)
+  devops-mcp-server:
+    image: 147379/devops-mcp-server:latest
+    # build:
+    #   context: ../nextjs-mcp-server  # Path to your MCP server repo
+    #   dockerfile: Dockerfile
+    ports:
+      - "3001:3002"  # Map host port 3001 to container port 3002
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/api/mcp?action=status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # GitLab MCP Server (official GitLab MCP implementation)
+  gitlab-mcp-server:
+    image: iwakitakuma/gitlab-mcp:latest
+    ports:
+      - "3333:3002"
+    environment:
+      - GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_PERSONAL_ACCESS_TOKEN}
+      - GITLAB_API_URL=${GITLAB_API_URL:-https://gitlab.com/api/v4}
+      - GITLAB_READ_ONLY_MODE=${GITLAB_READ_ONLY_MODE:-true}
+      - USE_GITLAB_WIKI=${USE_GITLAB_WIKI:-true}
+      - USE_MILESTONE=${USE_MILESTONE:-true}
+      - USE_PIPELINE=${USE_PIPELINE:-true}
+      - STREAMABLE_HTTP=${STREAMABLE_HTTP:-true}
+    networks:
+      - mcp-network
+
+  # MCP Client (Next.js frontend)
+  mcp-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_DEVOPS_MCP_URL=http://devops-mcp-server:3002
+      - NEXT_PUBLIC_GITLAB_MCP_URL=http://gitlab-mcp-server:3002
+      - DEVOPS_MCP_URL=http://devops-mcp-server:3002/api/mcp
+      - GITLAB_MCP_URL=http://gitlab-mcp-server:3002/mcp
+      - GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_PERSONAL_ACCESS_TOKEN}
+    networks:
+      - mcp-network
+    depends_on:
+      - devops-mcp-server
+      - gitlab-mcp-server
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  node_modules:

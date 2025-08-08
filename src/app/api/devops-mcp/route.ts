@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const DEVOPS_MCP_URL = 'http://localhost:3001/api/mcp';
+const DEVOPS_MCP_URL = process.env.DEVOPS_MCP_URL || 'http://localhost:3001/api/mcp';
 
 // For HTTP-based MCP servers (like your DevOps MCP server)
 export async function GET(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     switch (action) {
       case 'list-tools':
-        const toolsResponse = await fetch(`${DEVOPS_MCP_URL}`, {
+        const toolsResponse = await fetch(DEVOPS_MCP_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

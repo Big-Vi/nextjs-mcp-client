@@ -110,12 +110,13 @@ async function initializeMCPServer(mcpServerUrl: string, headers: Record<string,
 }
 
 async function makeMCPRequest(method: string, params: Record<string, unknown> = {}) {
-  const mcpServerUrl = process.env.GITLAB_MCP_URL || 'http://127.0.0.1:3333/mcp';
+  // Use environment variable or fallback to localhost
+  const mcpServerUrl = process.env.GITLAB_MCP_URL || 'http://localhost:3333/mcp';
   const baseHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/event-stream',
-    ...(process.env.GITLAB_TOKEN && {
-      'Authorization': `Bearer ${process.env.GITLAB_TOKEN}`
+    ...(process.env.GITLAB_PERSONAL_ACCESS_TOKEN && {
+      'Authorization': `Bearer ${process.env.GITLAB_PERSONAL_ACCESS_TOKEN}`
     })
   };
 
