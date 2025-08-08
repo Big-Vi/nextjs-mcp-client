@@ -1,6 +1,8 @@
 # Next.js MCP Client
 
-![MCP Client](./public/mcp-client.png)
+![MCP Client connecting with GitLab MCP Server](./public/mcp-client.png)
+
+![MCP Client connecting with DevOps MCP](./public/devops-mcp-server.png)
 
 ## Setup 
 See [SETUP.md](./SETUP.md) for installation and configuration instructions.
