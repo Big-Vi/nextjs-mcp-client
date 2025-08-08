@@ -1,7 +1,9 @@
 # Next.js MCP Client
 
-![MCP Client connecting with GitLab MCP Server](./public/mcp-client.png)
+GitLab MCP Server
+![MCP Client connecting with GitLab MCP Server](./public/gitlab-mcp-server.png)
 
+DevOps MCP Server
 ![MCP Client connecting with DevOps MCP](./public/devops-mcp-server.png)
 
 ## Setup 
