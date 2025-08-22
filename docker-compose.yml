@@ -18,7 +18,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # GitLab MCP Server (official GitLab MCP implementation)
+  # GitLab MCP Server (GitLab MCP implementation)
   gitlab-mcp-server:
     image: iwakitakuma/gitlab-mcp:latest
     ports:
